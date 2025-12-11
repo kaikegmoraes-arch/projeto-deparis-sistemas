@@ -1,4 +1,4 @@
-import { Wrench, ShoppingBag, FileText, Settings, Network, ArrowRight } from "lucide-react";
+import { Wrench, ShoppingBag, FileText, Settings, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -26,12 +26,6 @@ const services = [
     title: "Instalação e Configuração de Sistemas",
     description:
       "Implantação de sistemas operacionais, softwares e configurações personalizadas.",
-  },
-  {
-    icon: Network,
-    title: "Implementação de Estrutura de Rede Local",
-    description:
-      "Projeto e instalação de redes cabeadas e Wi-Fi para sua empresa.",
   },
 ];
 
