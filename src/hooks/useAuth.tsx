@@ -48,6 +48,18 @@ export function useAuth() {
     return { error, data };
   }, []);
 
+  const signInWithGoogle = useCallback(async () => {
+    setLoading(true);
+    const { error, data } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/admin`
+      }
+    });
+    setLoading(false);
+    return { error, data };
+  }, []);
+
   const signOut = useCallback(async () => {
     setLoading(true);
     await supabase.auth.signOut();
@@ -62,6 +74,7 @@ export function useAuth() {
     loading,
     signInWithEmail,
     signUp,
+    signInWithGoogle,
     signOut,
   };
 }
