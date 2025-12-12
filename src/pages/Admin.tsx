@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import MainLayout from "@/layouts/MainLayout";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { AdminRoute } from "@/components/auth/AdminRoute";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -293,9 +293,9 @@ function AdminContent() {
 export default function Admin() {
   return (
     <MainLayout>
-      <ProtectedRoute>
+      <AdminRoute>
         <AdminContent />
-      </ProtectedRoute>
+      </AdminRoute>
     </MainLayout>
   );
 }
