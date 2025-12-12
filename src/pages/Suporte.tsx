@@ -1,13 +1,22 @@
-import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Send, Loader2, Headphones, Clock, Shield, CheckCircle } from "lucide-react";
+import { supportFormSchema, SupportFormData } from "@/lib/validations";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 
 const benefits = [
   {
@@ -29,27 +38,29 @@ const benefits = [
 
 const Suporte = () => {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    company: "",
-    problem_description: "",
+  
+  const form = useForm<SupportFormData>({
+    resolver: zodResolver(supportFormSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      company: "",
+      problem_description: "",
+    },
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  const isLoading = form.formState.isSubmitting;
 
+  const onSubmit = async (data: SupportFormData) => {
     try {
       const { error } = await supabase.from("requests").insert({
         type: "support",
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        company: formData.company,
-        problem_description: formData.problem_description,
+        name: data.name.trim(),
+        email: data.email.trim(),
+        phone: data.phone.trim(),
+        company: data.company.trim(),
+        problem_description: data.problem_description.trim(),
       });
 
       if (error) throw error;
@@ -59,21 +70,13 @@ const Suporte = () => {
         description: "Nossa equipe entrará em contato em breve.",
       });
 
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        company: "",
-        problem_description: "",
-      });
+      form.reset();
     } catch (error) {
       toast({
         title: "Erro ao enviar",
         description: "Tente novamente mais tarde.",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -136,81 +139,99 @@ const Suporte = () => {
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6 bg-card p-8 rounded-2xl shadow-card border border-border">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nome *</Label>
-                    <Input
-                      id="name"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Seu nome completo"
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 bg-card p-8 rounded-2xl shadow-card border border-border">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nome *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Seu nome completo" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>E-mail *</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="seu@email.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">E-mail *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      required
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="seu@email.com"
-                    />
-                  </div>
-                </div>
 
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone *</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      required
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="(11) 99999-9999"
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefone *</FormLabel>
+                          <FormControl>
+                            <Input type="tel" placeholder="(11) 99999-9999" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="company"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Empresa *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nome da empresa" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Empresa *</Label>
-                    <Input
-                      id="company"
-                      required
-                      value={formData.company}
-                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                      placeholder="Nome da empresa"
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="problem_description">Descrição do Problema *</Label>
-                  <Textarea
-                    id="problem_description"
-                    required
-                    rows={6}
-                    value={formData.problem_description}
-                    onChange={(e) => setFormData({ ...formData, problem_description: e.target.value })}
-                    placeholder="Descreva detalhadamente o problema que está enfrentando..."
+                  <FormField
+                    control={form.control}
+                    name="problem_description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descrição do Problema *</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={6}
+                            placeholder="Descreva detalhadamente o problema que está enfrentando..."
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
                   />
-                </div>
 
-                <Button type="submit" className="w-full gap-2" size="lg" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Enviando chamado...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      Enviar Chamado
-                    </>
-                  )}
-                </Button>
-              </form>
+                  <Button type="submit" className="w-full gap-2" size="lg" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Enviando chamado...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Enviar Chamado
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </Form>
             </div>
           </div>
         </section>
