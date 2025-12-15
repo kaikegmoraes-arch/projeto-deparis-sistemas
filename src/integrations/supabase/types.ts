@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      documents: {
+        Row: {
+          category: Database["public"]["Enums"]["document_category"]
+          created_at: string
+          description: string | null
+          file_path: string
+          file_size: number | null
+          id: string
+          title: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["document_category"]
+          created_at?: string
+          description?: string | null
+          file_path: string
+          file_size?: number | null
+          id?: string
+          title: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["document_category"]
+          created_at?: string
+          description?: string | null
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          title?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       requests: {
         Row: {
           company: string | null
@@ -104,6 +164,12 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      document_category:
+        | "manuais"
+        | "contratos"
+        | "relatorios"
+        | "procedimentos"
+        | "outros"
       request_status: "novo" | "em_andamento" | "finalizado"
       request_type: "contact" | "support" | "quote"
     }
@@ -234,6 +300,13 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      document_category: [
+        "manuais",
+        "contratos",
+        "relatorios",
+        "procedimentos",
+        "outros",
+      ],
       request_status: ["novo", "em_andamento", "finalizado"],
       request_type: ["contact", "support", "quote"],
     },

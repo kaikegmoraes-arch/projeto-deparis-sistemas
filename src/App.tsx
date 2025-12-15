@@ -8,6 +8,7 @@ import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import Suporte from "./pages/Suporte";
 import Orcamento from "./pages/Orcamento";
+import Documentos from "./pages/Documentos";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ function App() {
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/documentos" element={<Documentos />} />
             <Route path="/suporte" element={<Suporte />} />
             <Route path="/orcamento" element={<Orcamento />} />
             <Route path="*" element={<NotFound />} />
