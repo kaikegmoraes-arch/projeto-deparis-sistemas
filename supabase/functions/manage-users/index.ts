@@ -1,228 +1,239 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+/**
+ * CORS RESTRITO
+ * Ajuste SITE_URL no ambiente do Supabase
+ */
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('SITE_URL') ?? '',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
+  // Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    // ❌ Bloqueia métodos indevidos
+    if (req.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ error: 'Method not allowed' }),
+        { status: 405, headers: corsHeaders }
+      )
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
-    // Get the authorization header to verify admin
+
+    // 🔐 Header de autorização obrigatório
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: corsHeaders }
       )
     }
 
-    // Create client with user's token to verify they're admin
-    const userClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } }
+    /**
+     * CLIENTE DO USUÁRIO
+     * Usa o JWT real enviado pelo frontend
+     */
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
     })
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser()
-    if (userError || !user) {
-      console.error('Auth error:', userError)
+    const { data: userData, error: authError } = await userClient.auth.getUser()
+    if (authError || !userData?.user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: corsHeaders }
       )
     }
 
-    // Check if user is admin
-    const { data: isAdmin } = await userClient.rpc('has_role', { 
-      _user_id: user.id, 
-      _role: 'admin' 
-    })
+    const user = userData.user
 
-    if (!isAdmin) {
-      console.error('User is not admin:', user.id)
+    /**
+     * 🔒 VERIFICA ADMIN
+     * Função has_role SEGURA:
+     * - sem _user_id
+     * - usa auth.uid()
+     */
+    const { data: isAdmin, error: roleError } =
+      await userClient.rpc('has_role', { _role: 'admin' })
+
+    if (roleError || !isAdmin) {
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 403, headers: corsHeaders }
       )
     }
 
-    // Create admin client with service role for user management
+    /**
+     * CLIENTE ADMINISTRADOR
+     * Service Role – apenas no backend
+     */
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
+      auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    const { action, ...data } = await req.json()
-    console.log('Action:', action, 'Data:', JSON.stringify(data))
+    const body = await req.json()
+    const { action } = body
 
-    switch (action) {
-      case 'list': {
-        // List all users
-        const { data: users, error } = await adminClient.auth.admin.listUsers()
-        if (error) {
-          console.error('List users error:', error)
-          throw error
-        }
+    // 🔒 Validação explícita de ações permitidas
+    if (!['list', 'create', 'update', 'delete'].includes(action)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid action' }),
+        { status: 400, headers: corsHeaders }
+      )
+    }
 
-        // Get profiles for full names
-        const { data: profiles } = await adminClient
-          .from('profiles')
-          .select('user_id, full_name')
+    /**
+     * ============================
+     * ACTION: LIST USERS
+     * ============================
+     */
+    if (action === 'list') {
+      const { data: users, error } = await adminClient.auth.admin.listUsers()
+      if (error) throw error
 
-        const profileMap = new Map(profiles?.map(p => [p.user_id, p.full_name]) || [])
+      const { data: profiles } = await adminClient
+        .from('profiles')
+        .select('user_id, full_name')
 
-        // Get roles
-        const { data: roles } = await adminClient
-          .from('user_roles')
-          .select('user_id, role')
+      const { data: roles } = await adminClient
+        .from('user_roles')
+        .select('user_id, role')
 
-        const roleMap = new Map(roles?.map(r => [r.user_id, r.role]) || [])
+      const profileMap = new Map(profiles?.map(p => [p.user_id, p.full_name]) || [])
+      const roleMap = new Map(roles?.map(r => [r.user_id, r.role]) || [])
 
-        const usersWithInfo = users.users.map(u => ({
-          id: u.id,
-          email: u.email,
-          full_name: profileMap.get(u.id) || '',
-          role: roleMap.get(u.id) || 'user',
-          created_at: u.created_at,
-          last_sign_in_at: u.last_sign_in_at
-        }))
+      const result = users.users.map(u => ({
+        id: u.id,
+        email: u.email,
+        full_name: profileMap.get(u.id) ?? '',
+        role: roleMap.get(u.id) ?? 'user',
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at,
+      }))
 
+      return new Response(JSON.stringify({ users: result }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    /**
+     * ============================
+     * ACTION: CREATE USER
+     * ============================
+     */
+    if (action === 'create') {
+      const { email, password, full_name } = body
+
+      if (!email || !password || !full_name) {
         return new Response(
-          JSON.stringify({ users: usersWithInfo }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Missing required fields' }),
+          { status: 400, headers: corsHeaders }
         )
       }
 
-      case 'create': {
-        const { email, password, full_name } = data
-        
-        if (!email || !password || !full_name) {
-          return new Response(
-            JSON.stringify({ error: 'Email, password and full_name are required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        // Create user
-        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+      const { data: created, error } =
+        await adminClient.auth.admin.createUser({
           email,
           password,
-          email_confirm: true // Auto-confirm email
+          email_confirm: true,
         })
 
-        if (createError) {
-          console.error('Create user error:', createError)
-          throw createError
-        }
+      if (error) throw error
 
-        // Create profile
-        const { error: profileError } = await adminClient
-          .from('profiles')
-          .insert({ user_id: newUser.user.id, full_name })
+      const userId = created.user.id
 
-        if (profileError) {
-          console.error('Create profile error:', profileError)
-          // Rollback user creation
-          await adminClient.auth.admin.deleteUser(newUser.user.id)
-          throw profileError
-        }
+      await adminClient.from('profiles').insert({
+        user_id: userId,
+        full_name,
+      })
 
-        // Add user role (default 'user')
-        await adminClient
-          .from('user_roles')
-          .insert({ user_id: newUser.user.id, role: 'user' })
+      await adminClient.from('user_roles').insert({
+        user_id: userId,
+        role: 'user',
+      })
 
-        console.log('User created successfully:', newUser.user.id)
-        return new Response(
-          JSON.stringify({ user: { id: newUser.user.id, email, full_name } }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      case 'update': {
-        const { user_id, email, password, full_name } = data
-
-        if (!user_id) {
-          return new Response(
-            JSON.stringify({ error: 'user_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        // Update auth user if email or password provided
-        if (email || password) {
-          const updateData: { email?: string; password?: string } = {}
-          if (email) updateData.email = email
-          if (password) updateData.password = password
-
-          const { error } = await adminClient.auth.admin.updateUserById(user_id, updateData)
-          if (error) {
-            console.error('Update user error:', error)
-            throw error
-          }
-        }
-
-        // Update profile if full_name provided
-        if (full_name) {
-          const { error } = await adminClient
-            .from('profiles')
-            .update({ full_name })
-            .eq('user_id', user_id)
-
-          if (error) {
-            console.error('Update profile error:', error)
-            throw error
-          }
-        }
-
-        console.log('User updated successfully:', user_id)
-        return new Response(
-          JSON.stringify({ success: true }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      case 'delete': {
-        const { user_id } = data
-
-        if (!user_id) {
-          return new Response(
-            JSON.stringify({ error: 'user_id is required' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
-        }
-
-        // Delete user (cascades to profiles and roles)
-        const { error } = await adminClient.auth.admin.deleteUser(user_id)
-        if (error) {
-          console.error('Delete user error:', error)
-          throw error
-        }
-
-        console.log('User deleted successfully:', user_id)
-        return new Response(
-          JSON.stringify({ success: true }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      default:
-        return new Response(
-          JSON.stringify({ error: 'Invalid action' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+      return new Response(
+        JSON.stringify({ id: userId, email, full_name }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
-  } catch (error: unknown) {
-    console.error('Error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+
+    /**
+     * ============================
+     * ACTION: UPDATE USER
+     * ============================
+     */
+    if (action === 'update') {
+      const { user_id, email, password, full_name } = body
+      if (!user_id) {
+        return new Response(
+          JSON.stringify({ error: 'user_id required' }),
+          { status: 400, headers: corsHeaders }
+        )
+      }
+
+      if (email || password) {
+        await adminClient.auth.admin.updateUserById(user_id, {
+          ...(email && { email }),
+          ...(password && { password }),
+        })
+      }
+
+      if (full_name) {
+        await adminClient
+          .from('profiles')
+          .update({ full_name })
+          .eq('user_id', user_id)
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: corsHeaders }
+      )
+    }
+
+    /**
+     * ============================
+     * ACTION: DELETE USER
+     * ============================
+     */
+    if (action === 'delete') {
+      const { user_id } = body
+      if (!user_id) {
+        return new Response(
+          JSON.stringify({ error: 'user_id required' }),
+          { status: 400, headers: corsHeaders }
+        )
+      }
+
+      await adminClient.auth.admin.deleteUser(user_id)
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: corsHeaders }
+      )
+    }
+
+    // fallback (não deve chegar aqui)
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: 'Unhandled action' }),
+      { status: 500, headers: corsHeaders }
+    )
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return new Response(
+      JSON.stringify({ error: message }),
+      { status: 500, headers: corsHeaders }
     )
   }
 })
