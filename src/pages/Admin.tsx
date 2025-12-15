@@ -22,9 +22,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, RefreshCw, Mail, Phone, Building, Clock, MessageSquare, FileText, Headphones, LogOut } from "lucide-react";
+import { Loader2, RefreshCw, Mail, Phone, Building, Clock, MessageSquare, FileText, Headphones, LogOut, Users, FolderOpen } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import UserManagement from "@/components/admin/UserManagement";
+import DocumentManagement from "@/components/admin/DocumentManagement";
 
 type RequestType = "contact" | "support" | "quote";
 type RequestStatus = "novo" | "em_andamento" | "finalizado";
@@ -75,7 +77,8 @@ function AdminContent() {
   const { user, signOut } = useAuth();
   const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"all" | RequestType>("all");
+  const [activeTab, setActiveTab] = useState<string>("requests");
+  const [requestFilter, setRequestFilter] = useState<"all" | RequestType>("all");
 
   const fetchRequests = async () => {
     setIsLoading(true);
@@ -129,9 +132,9 @@ function AdminContent() {
   }, []);
 
   const filteredRequests =
-    activeTab === "all"
+    requestFilter === "all"
       ? requests
-      : requests.filter((req) => req.type === activeTab);
+      : requests.filter((req) => req.type === requestFilter);
 
   const counts = {
     all: requests.length,
@@ -171,117 +174,145 @@ function AdminContent() {
       {/* Content */}
       <section className="py-8">
         <div className="container-custom section-padding">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-6">
-              <TabsTrigger value="all" className="gap-2">
-                Todas ({counts.all})
-              </TabsTrigger>
-              <TabsTrigger value="contact" className="gap-2">
+              <TabsTrigger value="requests" className="gap-2">
                 <MessageSquare className="w-4 h-4" />
-                Contato ({counts.contact})
+                Solicitações
               </TabsTrigger>
-              <TabsTrigger value="support" className="gap-2">
-                <Headphones className="w-4 h-4" />
-                Suporte ({counts.support})
+              <TabsTrigger value="users" className="gap-2">
+                <Users className="w-4 h-4" />
+                Usuários
               </TabsTrigger>
-              <TabsTrigger value="quote" className="gap-2">
-                <FileText className="w-4 h-4" />
-                Orçamento ({counts.quote})
+              <TabsTrigger value="documents" className="gap-2">
+                <FolderOpen className="w-4 h-4" />
+                Documentos
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value={activeTab}>
-              {isLoading ? (
-                <div className="flex items-center justify-center py-20">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                </div>
-              ) : filteredRequests.length === 0 ? (
-                <div className="text-center py-20 text-muted-foreground">
-                  Nenhuma solicitação encontrada.
-                </div>
-              ) : (
-                <div className="rounded-lg border border-border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="w-[100px]">Tipo</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead className="hidden md:table-cell">Contato</TableHead>
-                        <TableHead className="hidden lg:table-cell">Empresa</TableHead>
-                        <TableHead className="hidden xl:table-cell">Data</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredRequests.map((request) => {
-                        const TypeIcon = typeIcons[request.type];
-                        return (
-                          <TableRow key={request.id}>
-                            <TableCell>
-                              <Badge variant="outline" className="gap-1">
-                                <TypeIcon className="w-3 h-3" />
-                                {typeLabels[request.type]}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {request.name}
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                              <div className="flex flex-col gap-1 text-sm">
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <Mail className="w-3 h-3" />
-                                  {request.email}
-                                </span>
-                                {request.phone && (
-                                  <span className="flex items-center gap-1 text-muted-foreground">
-                                    <Phone className="w-3 h-3" />
-                                    {request.phone}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell">
-                              {request.company && (
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <Building className="w-3 h-3" />
-                                  {request.company}
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="hidden xl:table-cell">
-                              <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Clock className="w-3 h-3" />
-                                {format(new Date(request.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={statusColors[request.status]}>
-                                {statusLabels[request.status]}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Select
-                                value={request.status}
-                                onValueChange={(value) => updateStatus(request.id, value as RequestStatus)}
-                              >
-                                <SelectTrigger className="w-[140px]">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="novo">Novo</SelectItem>
-                                  <SelectItem value="em_andamento">Em andamento</SelectItem>
-                                  <SelectItem value="finalizado">Finalizado</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
+            <TabsContent value="requests">
+              {/* Request filter tabs */}
+              <Tabs value={requestFilter} onValueChange={(v) => setRequestFilter(v as typeof requestFilter)}>
+                <TabsList className="mb-6">
+                  <TabsTrigger value="all" className="gap-2">
+                    Todas ({counts.all})
+                  </TabsTrigger>
+                  <TabsTrigger value="contact" className="gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Contato ({counts.contact})
+                  </TabsTrigger>
+                  <TabsTrigger value="support" className="gap-2">
+                    <Headphones className="w-4 h-4" />
+                    Suporte ({counts.support})
+                  </TabsTrigger>
+                  <TabsTrigger value="quote" className="gap-2">
+                    <FileText className="w-4 h-4" />
+                    Orçamento ({counts.quote})
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value={requestFilter}>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-20">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                  ) : filteredRequests.length === 0 ? (
+                    <div className="text-center py-20 text-muted-foreground">
+                      Nenhuma solicitação encontrada.
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-border overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/50">
+                            <TableHead className="w-[100px]">Tipo</TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="hidden md:table-cell">Contato</TableHead>
+                            <TableHead className="hidden lg:table-cell">Empresa</TableHead>
+                            <TableHead className="hidden xl:table-cell">Data</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Ações</TableHead>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                        </TableHeader>
+                        <TableBody>
+                          {filteredRequests.map((request) => {
+                            const TypeIcon = typeIcons[request.type];
+                            return (
+                              <TableRow key={request.id}>
+                                <TableCell>
+                                  <Badge variant="outline" className="gap-1">
+                                    <TypeIcon className="w-3 h-3" />
+                                    {typeLabels[request.type]}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {request.name}
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell">
+                                  <div className="flex flex-col gap-1 text-sm">
+                                    <span className="flex items-center gap-1 text-muted-foreground">
+                                      <Mail className="w-3 h-3" />
+                                      {request.email}
+                                    </span>
+                                    {request.phone && (
+                                      <span className="flex items-center gap-1 text-muted-foreground">
+                                        <Phone className="w-3 h-3" />
+                                        {request.phone}
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="hidden lg:table-cell">
+                                  {request.company && (
+                                    <span className="flex items-center gap-1 text-muted-foreground">
+                                      <Building className="w-3 h-3" />
+                                      {request.company}
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="hidden xl:table-cell">
+                                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                                    <Clock className="w-3 h-3" />
+                                    {format(new Date(request.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={statusColors[request.status]}>
+                                    {statusLabels[request.status]}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Select
+                                    value={request.status}
+                                    onValueChange={(value) => updateStatus(request.id, value as RequestStatus)}
+                                  >
+                                    <SelectTrigger className="w-[140px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="novo">Novo</SelectItem>
+                                      <SelectItem value="em_andamento">Em andamento</SelectItem>
+                                      <SelectItem value="finalizado">Finalizado</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
+
+            <TabsContent value="users">
+              <UserManagement />
+            </TabsContent>
+
+            <TabsContent value="documents">
+              <DocumentManagement />
             </TabsContent>
           </Tabs>
         </div>
