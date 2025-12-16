@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Header } from "@/components/Header";
@@ -9,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Send, Loader2, Headphones, Clock, Shield, CheckCircle } from "lucide-react";
 import { supportFormSchema, SupportFormData } from "@/lib/validations";
+import { ReCaptcha, resetReCaptcha } from "@/components/ReCaptcha";
 import {
   Form,
   FormControl,
@@ -38,6 +40,7 @@ const benefits = [
 
 const Suporte = () => {
   const { toast } = useToast();
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   
   const form = useForm<SupportFormData>({
     resolver: zodResolver(supportFormSchema),
@@ -53,17 +56,40 @@ const Suporte = () => {
   const isLoading = form.formState.isSubmitting;
 
   const onSubmit = async (data: SupportFormData) => {
+    if (!recaptchaToken) {
+      toast({
+        title: "Verificação necessária",
+        description: "Por favor, complete o CAPTCHA antes de enviar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      const { error } = await supabase.from("requests").insert({
-        type: "support",
-        name: data.name.trim(),
-        email: data.email.trim(),
-        phone: data.phone.trim(),
-        company: data.company.trim(),
-        problem_description: data.problem_description.trim(),
+      const { data: response, error } = await supabase.functions.invoke("submit-form", {
+        body: {
+          type: "support",
+          recaptchaToken,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          company: data.company,
+          problem_description: data.problem_description,
+        },
       });
 
       if (error) throw error;
+
+      if (response.error) {
+        toast({
+          title: response.rateLimited ? "Limite de envios atingido" : "Erro ao enviar",
+          description: response.error,
+          variant: "destructive",
+        });
+        resetReCaptcha();
+        setRecaptchaToken(null);
+        return;
+      }
 
       toast({
         title: "Chamado enviado!",
@@ -71,12 +97,17 @@ const Suporte = () => {
       });
 
       form.reset();
+      resetReCaptcha();
+      setRecaptchaToken(null);
     } catch (error) {
+      console.error("Error submitting form:", error);
       toast({
         title: "Erro ao enviar",
         description: "Tente novamente mais tarde.",
         variant: "destructive",
       });
+      resetReCaptcha();
+      setRecaptchaToken(null);
     }
   };
 
@@ -217,7 +248,16 @@ const Suporte = () => {
                     )}
                   />
 
-                  <Button type="submit" className="w-full gap-2" size="lg" disabled={isLoading}>
+                  {/* reCAPTCHA */}
+                  <div className="py-2">
+                    <ReCaptcha 
+                      onVerify={(token) => setRecaptchaToken(token)}
+                      onExpire={() => setRecaptchaToken(null)}
+                      onError={() => setRecaptchaToken(null)}
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full gap-2" size="lg" disabled={isLoading || !recaptchaToken}>
                     {isLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
