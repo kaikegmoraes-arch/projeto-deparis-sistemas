@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, Monitor } from "lucide-react";
+import { Menu, X, Monitor, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
@@ -8,7 +8,6 @@ const navItems = [
   { name: "Sobre", href: "/#sobre" },
   { name: "Serviços", href: "/#servicos" },
   { name: "Suporte", href: "/suporte" },
-  { name: "Administração", href: "/admin" }, // 👈 ADICIONADO
   { name: "Contato", href: "/#contato" },
 ];
 
@@ -80,6 +79,12 @@ export function Header() {
 
           {/* Desktop CTA */}
           <div className="hidden lg:flex items-center gap-3">
+            <Link to="/login">
+              <Button variant="ghost" size="sm" className="gap-2">
+                <User className="w-4 h-4" />
+                Área do Usuário
+              </Button>
+            </Link>
             <Link to="/orcamento">
               <Button variant="outline" size="sm">
                 Solicitar Orçamento
@@ -114,6 +119,12 @@ export function Header() {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-4 border-t border-border">
+                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button variant="ghost" className="w-full gap-2">
+                    <User className="w-4 h-4" />
+                    Área do Usuário / Login
+                  </Button>
+                </Link>
                 <Link to="/orcamento" onClick={() => setIsMobileMenuOpen(false)}>
                   <Button variant="outline" className="w-full">
                     Solicitar Orçamento

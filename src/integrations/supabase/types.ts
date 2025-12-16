@@ -74,6 +74,27 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limits: {
+        Row: {
+          created_at: string
+          form_type: string
+          id: string
+          ip_address: string
+        }
+        Insert: {
+          created_at?: string
+          form_type: string
+          id?: string
+          ip_address: string
+        }
+        Update: {
+          created_at?: string
+          form_type?: string
+          id?: string
+          ip_address?: string
+        }
+        Relationships: []
+      }
       requests: {
         Row: {
           company: string | null

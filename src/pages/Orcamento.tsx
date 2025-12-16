@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Header } from "@/components/Header";
@@ -16,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Send, Loader2, FileText } from "lucide-react";
 import { quoteFormSchema, QuoteFormData } from "@/lib/validations";
+import { ReCaptcha, resetReCaptcha } from "@/components/ReCaptcha";
 import {
   Form,
   FormControl,
@@ -52,6 +54,7 @@ const urgencyLevels = [
 
 const Orcamento = () => {
   const { toast } = useToast();
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   
   const form = useForm<QuoteFormData>({
     resolver: zodResolver(quoteFormSchema),
@@ -71,21 +74,44 @@ const Orcamento = () => {
   const isLoading = form.formState.isSubmitting;
 
   const onSubmit = async (data: QuoteFormData) => {
+    if (!recaptchaToken) {
+      toast({
+        title: "Verificação necessária",
+        description: "Por favor, complete o CAPTCHA antes de enviar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      const { error } = await supabase.from("requests").insert({
-        type: "quote",
-        name: data.name.trim(),
-        email: data.email.trim(),
-        phone: data.phone.trim(),
-        company: data.company.trim(),
-        service_type: data.service_type,
-        equipment_quantity: data.equipment_quantity ? parseInt(data.equipment_quantity) : null,
-        company_type: data.company_type,
-        urgency: data.urgency,
-        message: data.message?.trim() || null,
+      const { data: response, error } = await supabase.functions.invoke("submit-form", {
+        body: {
+          type: "quote",
+          recaptchaToken,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          company: data.company,
+          service_type: data.service_type,
+          equipment_quantity: data.equipment_quantity ? parseInt(data.equipment_quantity) : null,
+          company_type: data.company_type,
+          urgency: data.urgency,
+          message: data.message || null,
+        },
       });
 
       if (error) throw error;
+
+      if (response.error) {
+        toast({
+          title: response.rateLimited ? "Limite de envios atingido" : "Erro ao enviar",
+          description: response.error,
+          variant: "destructive",
+        });
+        resetReCaptcha();
+        setRecaptchaToken(null);
+        return;
+      }
 
       toast({
         title: "Solicitação enviada!",
@@ -93,12 +119,17 @@ const Orcamento = () => {
       });
 
       form.reset();
+      resetReCaptcha();
+      setRecaptchaToken(null);
     } catch (error) {
+      console.error("Error submitting form:", error);
       toast({
         title: "Erro ao enviar",
         description: "Tente novamente mais tarde.",
         variant: "destructive",
       });
+      resetReCaptcha();
+      setRecaptchaToken(null);
     }
   };
 
@@ -310,7 +341,16 @@ const Orcamento = () => {
                     />
                   </div>
 
-                  <Button type="submit" className="w-full gap-2" size="lg" disabled={isLoading}>
+                  {/* reCAPTCHA */}
+                  <div className="py-2">
+                    <ReCaptcha 
+                      onVerify={(token) => setRecaptchaToken(token)}
+                      onExpire={() => setRecaptchaToken(null)}
+                      onError={() => setRecaptchaToken(null)}
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full gap-2" size="lg" disabled={isLoading || !recaptchaToken}>
                     {isLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
