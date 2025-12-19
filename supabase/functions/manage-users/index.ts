@@ -1,23 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-/**
- * CORS RESTRITO
- * Ajuste SITE_URL no ambiente do Supabase
- */
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('SITE_URL') ?? '',
+  'Access-Control-Allow-Origin': Deno.env.get('SITE_URL') ?? '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
 Deno.serve(async (req) => {
-  // Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    // ❌ Bloqueia métodos indevidos
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: 'Method not allowed' }),
@@ -29,7 +23,6 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    // 🔐 Header de autorização obrigatório
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(
@@ -38,10 +31,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    /**
-     * CLIENTE DO USUÁRIO
-     * Usa o JWT real enviado pelo frontend
-     */
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     })
@@ -54,16 +43,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    const user = userData.user
-
-    /**
-     * 🔒 VERIFICA ADMIN
-     * Função has_role SEGURA:
-     * - sem _user_id
-     * - usa auth.uid()
-     */
     const { data: isAdmin, error: roleError } =
-      await userClient.rpc('has_role', { _role: 'admin' })
+      await userClient.rpc('has_role', { _user_id: userData.user.id, _role: 'admin' })
 
     if (roleError || !isAdmin) {
       return new Response(
@@ -72,10 +53,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    /**
-     * CLIENTE ADMINISTRADOR
-     * Service Role – apenas no backend
-     */
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
@@ -83,7 +60,6 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const { action } = body
 
-    // 🔒 Validação explícita de ações permitidas
     if (!['list', 'create', 'update', 'delete'].includes(action)) {
       return new Response(
         JSON.stringify({ error: 'Invalid action' }),
@@ -91,30 +67,20 @@ Deno.serve(async (req) => {
       )
     }
 
-    /**
-     * ============================
-     * ACTION: LIST USERS
-     * ============================
-     */
+    // LIST USERS
     if (action === 'list') {
       const { data: users, error } = await adminClient.auth.admin.listUsers()
       if (error) throw error
-
-      const { data: profiles } = await adminClient
-        .from('profiles')
-        .select('user_id, full_name')
 
       const { data: roles } = await adminClient
         .from('user_roles')
         .select('user_id, role')
 
-      const profileMap = new Map(profiles?.map(p => [p.user_id, p.full_name]) || [])
       const roleMap = new Map(roles?.map(r => [r.user_id, r.role]) || [])
 
       const result = users.users.map(u => ({
         id: u.id,
         email: u.email,
-        full_name: profileMap.get(u.id) ?? '',
         role: roleMap.get(u.id) ?? 'user',
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
@@ -125,17 +91,21 @@ Deno.serve(async (req) => {
       })
     }
 
-    /**
-     * ============================
-     * ACTION: CREATE USER
-     * ============================
-     */
+    // CREATE USER
     if (action === 'create') {
-      const { email, password, full_name } = body
+      const { email, password, role = 'user' } = body
 
-      if (!email || !password || !full_name) {
+      if (!email || !password) {
         return new Response(
-          JSON.stringify({ error: 'Missing required fields' }),
+          JSON.stringify({ error: 'Email e senha são obrigatórios' }),
+          { status: 400, headers: corsHeaders }
+        )
+      }
+
+      // Validate role
+      if (!['user', 'admin'].includes(role)) {
+        return new Response(
+          JSON.stringify({ error: 'Tipo de conta inválido' }),
           { status: 400, headers: corsHeaders }
         )
       }
@@ -151,29 +121,23 @@ Deno.serve(async (req) => {
 
       const userId = created.user.id
 
-      await adminClient.from('profiles').insert({
-        user_id: userId,
-        full_name,
-      })
-
+      // Insert role
       await adminClient.from('user_roles').insert({
         user_id: userId,
-        role: 'user',
+        role: role,
       })
 
+      console.log(`User created: ${email} with role: ${role}`)
+
       return new Response(
-        JSON.stringify({ id: userId, email, full_name }),
+        JSON.stringify({ id: userId, email, role }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    /**
-     * ============================
-     * ACTION: UPDATE USER
-     * ============================
-     */
+    // UPDATE USER
     if (action === 'update') {
-      const { user_id, email, password, full_name } = body
+      const { user_id, email, password, role } = body
       if (!user_id) {
         return new Response(
           JSON.stringify({ error: 'user_id required' }),
@@ -188,12 +152,28 @@ Deno.serve(async (req) => {
         })
       }
 
-      if (full_name) {
-        await adminClient
-          .from('profiles')
-          .update({ full_name })
+      // Update role if provided
+      if (role && ['user', 'admin'].includes(role)) {
+        // Check if role exists
+        const { data: existingRole } = await adminClient
+          .from('user_roles')
+          .select('id')
           .eq('user_id', user_id)
+          .single()
+
+        if (existingRole) {
+          await adminClient
+            .from('user_roles')
+            .update({ role })
+            .eq('user_id', user_id)
+        } else {
+          await adminClient
+            .from('user_roles')
+            .insert({ user_id, role })
+        }
       }
+
+      console.log(`User updated: ${user_id}`)
 
       return new Response(
         JSON.stringify({ success: true }),
@@ -201,11 +181,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    /**
-     * ============================
-     * ACTION: DELETE USER
-     * ============================
-     */
+    // DELETE USER
     if (action === 'delete') {
       const { user_id } = body
       if (!user_id) {
@@ -217,13 +193,14 @@ Deno.serve(async (req) => {
 
       await adminClient.auth.admin.deleteUser(user_id)
 
+      console.log(`User deleted: ${user_id}`)
+
       return new Response(
         JSON.stringify({ success: true }),
         { headers: corsHeaders }
       )
     }
 
-    // fallback (não deve chegar aqui)
     return new Response(
       JSON.stringify({ error: 'Unhandled action' }),
       { status: 500, headers: corsHeaders }
@@ -231,6 +208,7 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('Error:', message)
     return new Response(
       JSON.stringify({ error: message }),
       { status: 500, headers: corsHeaders }
