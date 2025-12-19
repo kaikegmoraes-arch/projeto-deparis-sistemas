@@ -28,8 +28,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Pencil, Trash2, UserPlus } from "lucide-react";
+import { Loader2, Pencil, Trash2, UserPlus } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -37,7 +44,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 interface User {
   id: string;
   email: string;
-  full_name: string;
   role: string;
   created_at: string;
   last_sign_in_at: string | null;
@@ -45,14 +51,14 @@ interface User {
 
 const userSchema = z.object({
   email: z.string().email("Email inválido"),
-  full_name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  role: z.enum(["user", "admin"]),
 });
 
 const updateUserSchema = z.object({
   email: z.string().email("Email inválido"),
-  full_name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   password: z.string().optional(),
+  role: z.enum(["user", "admin"]),
 });
 
 type UserForm = z.infer<typeof userSchema>;
@@ -69,7 +75,7 @@ const UserManagement = () => {
 
   const createForm = useForm<UserForm>({
     resolver: zodResolver(userSchema),
-    defaultValues: { email: "", full_name: "", password: "" },
+    defaultValues: { email: "", password: "", role: "user" },
   });
 
   const editForm = useForm<UpdateUserForm>({
@@ -84,8 +90,8 @@ const UserManagement = () => {
     if (editingUser) {
       editForm.reset({
         email: editingUser.email,
-        full_name: editingUser.full_name,
         password: "",
+        role: editingUser.role as "user" | "admin",
       });
     }
   }, [editingUser, editForm]);
@@ -119,7 +125,7 @@ const UserManagement = () => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const response = await supabase.functions.invoke("manage-users", {
-        body: { action: "create", ...data },
+        body: { action: "create", email: data.email, password: data.password, role: data.role },
         headers: {
           Authorization: `Bearer ${sessionData.session?.access_token}`,
         },
@@ -156,7 +162,7 @@ const UserManagement = () => {
         action: "update",
         user_id: editingUser.id,
         email: data.email,
-        full_name: data.full_name,
+        role: data.role,
       };
       if (data.password) {
         updateData.password = data.password;
@@ -248,19 +254,6 @@ const UserManagement = () => {
             </DialogHeader>
             <form onSubmit={createForm.handleSubmit(handleCreate)} className="space-y-4">
               <div>
-                <Label htmlFor="full_name">Nome Completo</Label>
-                <Input
-                  id="full_name"
-                  {...createForm.register("full_name")}
-                  placeholder="Nome do usuário"
-                />
-                {createForm.formState.errors.full_name && (
-                  <p className="text-sm text-destructive mt-1">
-                    {createForm.formState.errors.full_name.message}
-                  </p>
-                )}
-              </div>
-              <div>
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -288,6 +281,21 @@ const UserManagement = () => {
                   </p>
                 )}
               </div>
+              <div>
+                <Label htmlFor="role">Tipo de Conta</Label>
+                <Select
+                  value={createForm.watch("role")}
+                  onValueChange={(value: "user" | "admin") => createForm.setValue("role", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="user">Usuário</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
@@ -310,9 +318,8 @@ const UserManagement = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Função</TableHead>
+              <TableHead>Tipo</TableHead>
               <TableHead>Criado em</TableHead>
               <TableHead>Último acesso</TableHead>
               <TableHead className="text-right">Ações</TableHead>
@@ -321,15 +328,14 @@ const UserManagement = () => {
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
+                <TableCell colSpan={5} className="text-center py-8">
                   Nenhum usuário encontrado
                 </TableCell>
               </TableRow>
             ) : (
               users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
-                  <TableCell>{user.email}</TableCell>
+                  <TableCell className="font-medium">{user.email}</TableCell>
                   <TableCell>
                     <span
                       className={`px-2 py-1 rounded-full text-xs ${
@@ -380,18 +386,6 @@ const UserManagement = () => {
           </DialogHeader>
           <form onSubmit={editForm.handleSubmit(handleUpdate)} className="space-y-4">
             <div>
-              <Label htmlFor="edit_full_name">Nome Completo</Label>
-              <Input
-                id="edit_full_name"
-                {...editForm.register("full_name")}
-              />
-              {editForm.formState.errors.full_name && (
-                <p className="text-sm text-destructive mt-1">
-                  {editForm.formState.errors.full_name.message}
-                </p>
-              )}
-            </div>
-            <div>
               <Label htmlFor="edit_email">Email</Label>
               <Input
                 id="edit_email"
@@ -412,6 +406,21 @@ const UserManagement = () => {
                 {...editForm.register("password")}
                 placeholder="Deixe vazio para manter a atual"
               />
+            </div>
+            <div>
+              <Label htmlFor="edit_role">Tipo de Conta</Label>
+              <Select
+                value={editForm.watch("role")}
+                onValueChange={(value: "user" | "admin") => editForm.setValue("role", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">Usuário</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex justify-end gap-2">
               <Button
@@ -436,7 +445,7 @@ const UserManagement = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o usuário "{deletingUser?.full_name || deletingUser?.email}"?
+              Tem certeza que deseja excluir o usuário "{deletingUser?.email}"?
               Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
