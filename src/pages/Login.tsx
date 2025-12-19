@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,42 +6,12 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Monitor, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 
 export default function Login() {
-  const { signInWithEmail, loading, user } = useAuth();
-  const navigate = useNavigate();
+  const { signInWithEmail, loading } = useAuth();
   const { toast } = useToast();
-  const [isCheckingRole, setIsCheckingRole] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  useEffect(() => {
-    const checkRoleAndRedirect = async () => {
-      if (user) {
-        setIsCheckingRole(true);
-        try {
-          const { data: isAdmin } = await supabase.rpc("has_role", {
-            _user_id: user.id,
-            _role: "admin",
-          });
-
-          if (isAdmin) {
-            navigate("/admin");
-          } else {
-            navigate("/documentos");
-          }
-        } catch (error) {
-          console.error("Error checking role:", error);
-          navigate("/documentos");
-        } finally {
-          setIsCheckingRole(false);
-        }
-      }
-    };
-
-    checkRoleAndRedirect();
-  }, [user, navigate]);
 
   const onLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,14 +26,6 @@ export default function Login() {
       });
     }
   };
-
-  if (isCheckingRole) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/20">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/20">
