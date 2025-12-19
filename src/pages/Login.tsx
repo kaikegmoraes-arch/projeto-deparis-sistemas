@@ -1,7 +1,4 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -12,18 +9,13 @@ import { Monitor, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
-const loginSchema = z.object({
-  email: z.string().email("Email inválido"),
-  password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
-
 export default function Login() {
   const { signInWithEmail, loading, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isCheckingRole, setIsCheckingRole] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     const checkRoleAndRedirect = async () => {
@@ -52,12 +44,9 @@ export default function Login() {
     checkRoleAndRedirect();
   }, [user, navigate]);
 
-  const loginForm = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-  });
-
-  const onLogin = async (data: LoginForm) => {
-    const { error } = await signInWithEmail(data.email, data.password);
+  const onLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await signInWithEmail(email, password);
     if (error) {
       toast({
         title: "Erro ao entrar",
@@ -94,20 +83,16 @@ export default function Login() {
           Acesso ao Sistema
         </h2>
 
-        <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
+        <form onSubmit={onLogin} className="space-y-4">
           <div>
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
-              {...loginForm.register("email")}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="mt-1"
             />
-            {loginForm.formState.errors.email && (
-              <p className="text-sm text-destructive mt-1">
-                {loginForm.formState.errors.email.message}
-              </p>
-            )}
           </div>
 
           <div>
@@ -115,14 +100,10 @@ export default function Login() {
             <Input
               id="password"
               type="password"
-              {...loginForm.register("password")}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="mt-1"
             />
-            {loginForm.formState.errors.password && (
-              <p className="text-sm text-destructive mt-1">
-                {loginForm.formState.errors.password.message}
-              </p>
-            )}
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
